@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Path to the mxpy command and required pem file
-MXPY_COMMAND="mxpy --verbose contract call erd1qqqqqqqqqqqqqpgqwjp236rchkw2w8k4s7qlh6u46045g6k67mtq950023 \
+MXPY_COMMAND="mxpy --verbose contract call erd1qqqqqqqqqqqqqpgq8w3w2kcmwste0q00vqnuqxt6sw4slhgl7mtqpp8txh \
   --recall-nonce \
   --pem=new_wallet.pem \
   --gas-limit=5000000 \

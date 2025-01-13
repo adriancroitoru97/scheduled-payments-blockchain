@@ -151,7 +151,7 @@ where
     >(
         self,
         user: Arg0,
-    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, Option<TransactionRecord<Env::Api>>> {
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, ManagedVec<Env::Api, TransactionRecord<Env::Api>>> {
         self.wrapped_tx
             .payment(NotPayable)
             .raw_call("getTransactionHistory")
@@ -187,7 +187,7 @@ where
 }
 
 #[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, Debug)]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, Debug, ManagedVecItem)]
 pub struct TransactionRecord<Api>
 where
     Api: ManagedTypeApi,

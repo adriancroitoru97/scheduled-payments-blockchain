@@ -376,12 +376,11 @@ impl ContractInteract {
 
 // cargo run -- addSchedule erd1utky5v3jhqr9x8lcyytz28deplr2lpn7w8nr5hgc6h84m5ca7n7qet8a58 0.01 1 0 1
 
-// mxpy --verbose contract call erd1qqqqqqqqqqqqqpgqhvtcgwh6u8ycdn9t7wq2v84xuwux6snv7mtqggl46z \
+// mxpy --verbose contract call erd1qqqqqqqqqqqqqpgqwjp236rchkw2w8k4s7qlh6u46045g6k67mtq950023 \
 //   --recall-nonce \
 //   --pem=new_wallet.pem \
 //   --gas-limit=5000000 \
-//   --function="getSchedules" \
-//   --arguments 0x6572643136776763347539366B703376657378617061616A3579706B727866756D7A386A6A6B3433613970743635783865747737376D7471386175667136 \
+//   --function="executePayments" \
 //   --send \
 //   --proxy=https://devnet-gateway.multiversx.com \
 //   --chain=D

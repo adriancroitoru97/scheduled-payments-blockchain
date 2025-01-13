@@ -1,126 +1,92 @@
-import { useState, useCallback } from 'react';
+import {
+  Address,
+  AbiRegistry,
+  SmartContract,
+  Interaction,
+  ProxyNetworkProvider,
+  TypedValue,
+  ResultsParser,
+  AddressValue,
+  ContractFunction,
+} from '@multiversx/sdk-core';
 import { contractAddress } from 'config';
-import { useGetAccountInfo, useGetNetworkConfig } from 'hooks/sdkDappHooks';
-import { Address, BigUIntValue, ResultsParser, TypedValue } from '@multiversx/sdk-core';
-import { smartContract } from 'utils/smartContract';
+import { useGetNetworkConfig, useGetAccountInfo } from 'hooks';
+import { useState, useCallback } from 'react';
+import json from 'contracts/paysystem.abi.json';
 
-const decodePaymentSchedules = (hexString: string) => {
-  const buffer = Buffer.from(hexString, 'hex');
-  const schedules = [];
-  let offset = 0;
-
-  console.log('Buffer length:', buffer.length);
-
-  while (offset < buffer.length) {
-    // Validate remaining buffer length before decoding each field
-    if (offset + 32 > buffer.length) {
-      throw new Error('Insufficient data for recipient field');
-    }
-
-    // Decode `recipient` (32 bytes for an Address)
-    const recipientHex = buffer.subarray(offset, offset + 32).toString('hex');
-    const recipient = Address.fromHex(recipientHex).bech32();
-    console.log("recipient", recipient);
-    offset += 32;
-
-    if (offset + 8 > buffer.length) {
-      throw new Error('Insufficient data for amount field');
-    }
-
-    // Decode `amount` (BigUint, 16 bytes)
-    const amountBuffer = buffer.subarray(offset, offset + 8);
-    const amount = BigInt(`0x${amountBuffer.toString('hex')}`);
-    console.log("amount", amount);
-    offset += 8;
-
-    if (offset + 8 > buffer.length) {
-      throw new Error('Insufficient data for frequency field');
-    }
-
-    // Decode `frequency` (u64, 8 bytes)
-    const frequency = buffer.readBigUInt64LE(offset);
-    console.log("frequency", frequency);
-    offset += 8;
-
-    if (offset + 8 > buffer.length) {
-      throw new Error('Insufficient data for next_execution_time field');
-    }
-
-    // Decode `next_execution_time` (u64, 8 bytes)
-    const nextExecutionTime = buffer.readBigUInt64LE(offset);
-    offset += 8;
-
-    if (offset + 8 > buffer.length) {
-      throw new Error('Insufficient data for end_time field');
-    }
-
-    // Decode `end_time` (u64, 8 bytes)
-    const endTime = buffer.readBigUInt64LE(offset);
-    offset += 8;
-
-    // Add the schedule to the result
-    schedules.push({
-      recipient,
-      amount: amount.toString(),
-      frequency: Number(frequency),
-      nextExecutionTime: new Date(Number(nextExecutionTime) * 1000),
-      endTime: new Date(Number(endTime) * 1000),
-    });
-  }
-
-  console.log('Decoded schedules:', schedules);
-  return schedules;
-};
-
+interface PaymentSchedule {
+  recipient: string;
+  amount: string;
+  frequency: string;
+  nextExecutionTime: string;
+  endTime: string;
+}
 
 export const useGetSubscriptions = () => {
   const { network } = useGetNetworkConfig();
   const { address } = useGetAccountInfo();
   const [isLoading, setIsLoading] = useState(false);
-  const [schedules, setSchedules] = useState<any[]>([]);
+  const [schedules, setSchedules] = useState<PaymentSchedule[]>([]);
+
   const fetchSchedules = useCallback(async () => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-  
-      const encodedAddress = Address.fromBech32(address).hex();
-      const queryData = {
-        scAddress: contractAddress,
-        funcName: 'getSchedules',
-        args: [encodedAddress],
-      };
-  
-      const response = await fetch(`${network.apiAddress}/vm-values/query`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(queryData),
+      // Initialize network provider
+      const provider = new ProxyNetworkProvider(network.apiAddress);
+
+      // Load ABI registry and smart contract
+      const abi = AbiRegistry.create(json);
+      const contract = new SmartContract({
+        address: new Address(contractAddress),
+        abi: abi,
       });
-  
-      if (!response.ok) {
-        throw new Error(`Error fetching schedules: ${response.statusText}`);
-      }
-  
-      const result = await response.json();
-      const returnData = result.data.data.returnData;
-  
-      console.log('Encoded return data:', returnData);
-  
-      const decodedReturnData = returnData.map((base64Encoded: string) =>
-        Buffer.from(base64Encoded, 'base64').toString('hex')
+
+      // Create interaction
+      const interaction = new Interaction(contract, new ContractFunction('getSchedules'), [
+        new AddressValue(new Address(address)),
+      ]);
+
+      // Query the smart contract
+      const query = interaction.buildQuery();
+      const queryResponse = await provider.queryContract(query);
+
+      // Parse the response
+      const resultsParser = new ResultsParser();
+      const { firstValue } = resultsParser.parseQueryResponse(
+        queryResponse,
+        interaction.getEndpoint()
       );
-      console.log('Decoded return data:', decodedReturnData);
-  
-      const schedules = decodePaymentSchedules(decodedReturnData[0]);
-      console.log('Decoded schedules:', schedules);
-  
+
+      // Ensure response is a List
+      if (!firstValue) {
+        throw new Error('Invalid response format: Expected a List');
+      }
+
+      // Extract items from the List
+      const items = firstValue.valueOf();
+
+      // Map items to PaymentSchedule objects
+      const schedules = items.map((item: TypedValue) => {
+        const fields = item.valueOf(); // Extract individual fields
+
+        return {
+          recipient: fields.recipient.valueOf().bech32(), // Convert address to bech32 format
+          amount: parseInt((BigInt(fields.amount.valueOf().toString()) * BigInt(10 ** 6) / BigInt(10 ** 18)).toString()) / 1000000, // Convert amount to human-readable format by dividing by 10^18
+          frequency: (BigInt(fields.frequency.valueOf().toString()) / BigInt(3600)).toString(), // Convert frequency from seconds to hours
+          nextExecutionTime: new Date(Number(fields.next_execution_time.valueOf().toString()) * 1000), // Convert UNIX timestamp (seconds) to Date
+          endTime: new Date(Number(fields.end_time.valueOf().toString()) * 1000), // Convert UNIX timestamp (seconds) to Date
+        };        
+      });
+
       setSchedules(schedules);
     } catch (error) {
       console.error('Failed to fetch schedules:', error);
+      setSchedules([]);
     } finally {
       setIsLoading(false);
     }
   }, [address, network.apiAddress]);
-  
+
   return { isLoading, schedules, fetchSchedules };
 };
+

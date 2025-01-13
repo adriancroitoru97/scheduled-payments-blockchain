@@ -12,7 +12,7 @@ pub struct PaymentSchedule<M: ManagedTypeApi> {
     pub end_time: u64,
 }
 
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, Clone)]
+#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, TypeAbi, Clone, ManagedVecItem)]
 pub struct TransactionRecord<M: ManagedTypeApi> {
     pub recipient: ManagedAddress<M>,
     pub amount: BigUint<M>,
@@ -27,7 +27,9 @@ pub trait PaySystem {
     ) -> MapMapper<ManagedAddress<Self::Api>, ManagedVec<Self::Api, PaymentSchedule<Self::Api>>>;
 
     #[storage_mapper("transaction_history")]
-    fn transaction_history(&self) -> MapMapper<ManagedAddress<Self::Api>, TransactionRecord<Self::Api>>;
+    fn transaction_history(
+        &self,
+    ) -> MapMapper<ManagedAddress<Self::Api>, ManagedVec<Self::Api, TransactionRecord<Self::Api>>>;
 
     #[storage_mapper("balances")]
     fn balances(&self) -> MapMapper<ManagedAddress<Self::Api>, BigUint<Self::Api>>;
@@ -82,8 +84,8 @@ pub trait PaySystem {
 
         for (user, mut schedules) in self.payment_schedules().iter() {
             let mut user_balance = self.balances().get(&user).unwrap_or_default();
-
             let mut i = 0;
+
             while i < schedules.len() {
                 let schedule = schedules.get(i);
 
@@ -100,13 +102,20 @@ pub trait PaySystem {
                     self.send().direct_egld(&schedule.recipient, &schedule.amount);
 
                     // Record the transaction in history
-                    let transaction = TransactionRecord {
+                    let mut user_history = self
+                        .transaction_history()
+                        .get(&user)
+                        .unwrap_or_else(|| ManagedVec::new());
+
+                    user_history.push(TransactionRecord {
                         recipient: schedule.recipient.clone(),
                         amount: schedule.amount.clone(),
                         timestamp: current_time,
-                    };
-                    self.transaction_history().insert(user.clone(), transaction);
+                    });
 
+                    self.transaction_history().insert(user.clone(), user_history);
+
+                    // Update or remove the schedule
                     if schedule.next_execution_time + schedule.frequency >= schedule.end_time {
                         schedules.remove(i);
                     } else {
@@ -118,12 +127,12 @@ pub trait PaySystem {
                 }
             }
 
-            // Clone `user` to use it without moving
+            // Update balances and schedules in storage
             self.balances().insert(user.clone(), user_balance);
             self.payment_schedules().insert(user, schedules);
         }
     }
-    
+
     #[endpoint(depositFunds)]
     #[payable("EGLD")]
     fn deposit_funds(&self) {
@@ -157,8 +166,13 @@ pub trait PaySystem {
     }
 
     #[view(getTransactionHistory)]
-    fn get_transaction_history(&self, user: ManagedAddress<Self::Api>) -> Option<TransactionRecord<Self::Api>> {
-        self.transaction_history().get(&user)
+    fn get_transaction_history(
+        &self,
+        user: ManagedAddress<Self::Api>,
+    ) -> ManagedVec<Self::Api, TransactionRecord<Self::Api>> {
+        self.transaction_history()
+            .get(&user)
+            .unwrap_or_else(|| ManagedVec::new())
     }
 
     #[view(getBalance)]

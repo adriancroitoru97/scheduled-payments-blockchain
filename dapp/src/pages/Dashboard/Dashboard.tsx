@@ -3,7 +3,8 @@ import { AuthRedirectWrapper } from 'wrappers';
 import {
   Account,
   Transactions,
-  NewSubscription
+  NewSubscription,
+  PaySystemAccount
 } from './widgets';
 import { useScrollToElement } from 'hooks';
 import { Widget } from './components';
@@ -28,12 +29,18 @@ const WIDGETS: WidgetType[] = [
       ''
   },
   {
-    title: 'Transactions History (PaySystem)',
+    title: 'Your transaction history (PaySystem)',
     widget: Transactions,
     props: { receiver: contractAddress },
     description: 'List of last paid subscriptions',
     reference:
       'https://api.elrond.com/#/accounts/AccountController_getAccountTransactions'
+  },
+  {
+    title: 'PaySystem Account',
+    widget: PaySystemAccount,
+    description: 'Your PaySystem account',
+    reference: ''
   },
   {
     title: 'Account',

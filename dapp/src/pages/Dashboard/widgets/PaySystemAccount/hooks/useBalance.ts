@@ -4,7 +4,6 @@ import {
   SmartContract,
   Interaction,
   ProxyNetworkProvider,
-  TypedValue,
   ResultsParser,
   AddressValue,
   ContractFunction,
@@ -14,19 +13,13 @@ import { useGetNetworkConfig, useGetAccountInfo } from 'hooks';
 import { useState, useCallback } from 'react';
 import json from 'contracts/paysystem.abi.json';
 
-interface TransactionRecord {
-  recipient: string;
-  amount: string;
-  timestamp: string;
-}
-
-export const useGetTransactions = () => {
+export const useBalance = () => {
   const { network } = useGetNetworkConfig();
   const { address } = useGetAccountInfo();
   const [isLoading, setIsLoading] = useState(false);
-  const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
+  const [balance, setBalance] = useState<number>(0);
 
-  const fetchTransactions = useCallback(async () => {
+  const fetchBalance = useCallback(async () => {
     setIsLoading(true);
     try {
       // Initialize network provider
@@ -40,7 +33,7 @@ export const useGetTransactions = () => {
       });
 
       // Create interaction
-      const interaction = new Interaction(contract, new ContractFunction('getTransactionHistory'), [
+      const interaction = new Interaction(contract, new ContractFunction('getBalance'), [
         new AddressValue(new Address(address)),
       ]);
 
@@ -54,34 +47,20 @@ export const useGetTransactions = () => {
         queryResponse,
         interaction.getEndpoint()
       );
-
-      // Ensure response is a List
       if (!firstValue) {
-        throw new Error('Invalid response format: Expected a List');
+        throw new Error('Invalid response format: Expected a number');
       }
 
-      // Extract items from the List
-      const items = firstValue.valueOf();
+      const balance = firstValue.valueOf();
 
-      // Map items to TransactionRecord objects
-      const transactions = items.map((item: TypedValue) => {
-        const fields = item.valueOf(); // Extract individual fields
-
-        return {
-          recipient: fields.recipient.valueOf().bech32(), // Convert address to bech32 format
-          amount: parseInt((BigInt(fields.amount.valueOf().toString()) * BigInt(10 ** 6) / BigInt(10 ** 18)).toString()) / 1000000, // Convert amount to human-readable format by dividing by 10^18
-          timestamp: new Date(Number(fields.timestamp.valueOf().toString()) * 1000), // Convert UNIX timestamp (seconds) to Date
-        };        
-      });
-
-      setTransactions(transactions);
+      setBalance(balance);
     } catch (error) {
-      console.error('Failed to fetch transactions:', error);
-      setTransactions([]);
+      console.error('Failed to fetch schedules:', error);
+      setBalance(0);
     } finally {
       setIsLoading(false);
     }
   }, [address, network.apiAddress]);
 
-  return { isLoading, transactions, fetchTransactions };
+  return { isLoading, balance, fetchBalance };
 };
